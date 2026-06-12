@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #166432;
+  --color-primary-dark: #0f4d25;
+  --color-primary-light: #1e8a3e;
+}
+
+@media print {
+  body * { visibility: hidden; }
+  #invoice-print, #invoice-print * { visibility: visible; }
+  #invoice-print { position: absolute; left: 0; top: 0; width: 100%; }
+  body { margin: 0; padding: 0; }
+}
