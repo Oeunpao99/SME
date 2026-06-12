@@ -61,16 +61,16 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-[#eef3fb] text-slate-900">
+    <div className="flex h-screen bg-[#f3f6f4] text-slate-900">
       <Sidebar
         currentPage={isFormPage ? 'inventory' : currentPage}
         onNavigate={setCurrentPage}
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}
       />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Header title={isFormPage ? 'Stock Adjustment' : page.title} onMenuClick={() => setMobileOpen(true)} />
-        <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+        <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-5 lg:px-6 lg:py-5">
           {renderPage()}
         </main>
       </div>

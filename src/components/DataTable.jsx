@@ -3,9 +3,9 @@ export default function DataTable({ columns, data, onRowClick }) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-100">
+          <tr className="border-y border-slate-100 bg-slate-50/70">
             {columns.map(col => (
-              <th key={col.key} className="text-left px-3 py-2.5 font-semibold text-gray-500 text-xs uppercase tracking-wider">
+              <th key={col.key} className="text-left px-3 py-2.5 font-extrabold text-slate-500 text-[11px] uppercase tracking-wide whitespace-nowrap">
                 {col.label}
               </th>
             ))}
@@ -14,7 +14,7 @@ export default function DataTable({ columns, data, onRowClick }) {
         <tbody>
           {data.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="text-center py-10 text-gray-300 text-sm">
+              <td colSpan={columns.length} className="text-center py-10 text-slate-300 text-sm">
                 No data available
               </td>
             </tr>
@@ -23,10 +23,10 @@ export default function DataTable({ columns, data, onRowClick }) {
               <tr
                 key={row.id ?? idx}
                 onClick={() => onRowClick?.(row)}
-                className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
+                className={`border-b border-slate-100/80 hover:bg-emerald-50/35 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
               >
                 {columns.map(col => (
-                  <td key={col.key} className="px-3 py-2.5 text-gray-600 text-sm">
+                  <td key={col.key} className="px-3 py-2.5 text-slate-700 text-xs whitespace-nowrap">
                     {col.render ? col.render(row) : row[col.key]}
                   </td>
                 ))}
