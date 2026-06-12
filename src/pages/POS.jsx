@@ -2,13 +2,13 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Search, Plus, Minus, Trash2, ShoppingCart as CartIcon,
   X, UserPlus, Clock, Percent, DollarSign,
-  Ban, Check, FileText
+  Ban, Check, FileText, QrCode
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import InsufficientStockModal from '../components/InsufficientStockModal'
 import {
   products as initialProducts, sales, customers as initialCustomers,
-  formatCurrency, inventoryMovements, activityLog, payments
+  formatCurrency, formatKHR, inventoryMovements, activityLog, payments
 } from '../data/mockData'
 
 let saleIdCounter = 2000
@@ -41,11 +41,32 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
   const [reservedCart, setReservedCart] = useState([])
   const [insufficientItems, setInsufficientItems] = useState([])
   const [showInsufficient, setShowInsufficient] = useState(false)
+  const [showQrModal, setShowQrModal] = useState(false)
+  const [qrStep, setQrStep] = useState('idle')
   const [rememberedAction, setRememberedAction] = useState(null)
   const [saleMode, setSaleMode] = useState('sale')
   const [invoiceList, setInvoiceList] = useState([])
   const [cartTab, setCartTab] = useState('cart')
   const customerRef = useRef(null)
+
+  useEffect(() => {
+    if (qrStep === 'scan') {
+      const timer = setTimeout(() => setQrStep('verifying'), 3000)
+      return () => clearTimeout(timer)
+    }
+    if (qrStep === 'verifying') {
+      const timer = setTimeout(() => setQrStep('success'), 1200)
+      return () => clearTimeout(timer)
+    }
+    if (qrStep === 'success') {
+      const timer = setTimeout(() => {
+        setShowQrModal(false)
+        setQrStep('idle')
+        executeSale()
+      }, 1500)
+      return () => clearTimeout(timer)
+    }
+  }, [qrStep])
 
   const RESERVATION_DURATION = 900
 
@@ -98,7 +119,7 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
         if (existing.qty >= product.currentStock) return prev
         return prev.map(c => c.id === product.id ? { ...c, qty: c.qty + 1 } : c)
       }
-      return [...prev, { ...product, qty: 1, reserved: null }]
+      return [...prev, { ...product, qty: 1, discount: 0, reserved: null }]
     })
   }
 
@@ -138,7 +159,7 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
 
     const newInvoice = {
       id, invoiceNumber: invNum, date: dateStr,
-      customer, items: cart.map(c => ({ product: c.name, qty: c.qty, unitPrice: c.sellingPrice })),
+      customer,       items: cart.map(c => ({ product: c.name, qty: c.qty, unitPrice: c.sellingPrice * (1 - (c.discount || 0) / 100), discount: c.discount || 0 })),
       subtotal, total: Math.max(0, subtotal - discountVal),
       status: 'Pending',
       createdBy: 'Cashier Sophea',
@@ -198,7 +219,7 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
     setReservedCart([])
   }
 
-  const subtotal = useMemo(() => cart.reduce((s, c) => s + c.sellingPrice * c.qty, 0), [cart])
+  const subtotal = useMemo(() => cart.reduce((s, c) => s + c.sellingPrice * c.qty * (1 - (c.discount || 0) / 100), 0), [cart])
   const discountVal = useMemo(() => {
     const raw = parseFloat(discount) || 0
     return discountMode === 'percent' ? subtotal * (raw / 100) : raw
@@ -237,7 +258,7 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
     const saleId = saleIdCounter++
     const newSale = {
       id: saleId, invoice: invNum, date: dateStr, customer,
-      items: itemsToSell.map(c => ({ product: c.name, qty: c.qty, price: c.sellingPrice })),
+      items: itemsToSell.map(c => ({ product: c.name, qty: c.qty, price: c.sellingPrice * (1 - (c.discount || 0) / 100), discount: c.discount || 0 })),
       subtotal, discount: discountVal, total,
       paymentMethod,
       paymentStatus: paid >= total ? 'Paid' : paid > 0 ? 'Partial' : 'Unpaid',
@@ -293,6 +314,11 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
       }
       setInsufficientItems(problems)
       setShowInsufficient(true)
+      return
+    }
+    if (paymentMethod === 'KHQR') {
+      setShowQrModal(true)
+      setTimeout(() => setQrStep('scan'), 50)
       return
     }
     executeSale()
@@ -371,7 +397,10 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
                 <p className="font-medium text-sm text-gray-800 truncate group-hover:text-primary transition-colors">{p.name}</p>
                 <p className="text-xs text-gray-400 mb-1.5">{p.category}</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-base font-bold text-primary">{formatCurrency(p.sellingPrice)}</span>
+                  <div>
+                    <span className="text-base font-bold text-primary">{formatCurrency(p.sellingPrice)}</span>
+                    <p className="text-[10px] text-gray-400">{formatKHR(p.sellingPrice)}</p>
+                  </div>
                   <span className={`text-[11px] ${p.currentStock <= p.minStock ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
                     {p.currentStock <= p.minStock ? `${p.currentStock} left` : `${p.currentStock}`}
                   </span>
@@ -524,7 +553,7 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{c.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(c.sellingPrice)} each</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(c.sellingPrice)} each<span className="text-[10px] text-gray-300 ml-1">({formatKHR(c.sellingPrice)})</span></p>
                   </div>
                   <button onClick={() => removeFromCart(c.id)}
                     className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors cursor-pointer shrink-0">
@@ -544,7 +573,21 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
                       <Plus size={15} />
                     </button>
                   </div>
-                  <p className="text-sm font-bold text-gray-800">{formatCurrency(c.sellingPrice * c.qty)}</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 text-xs text-gray-400">
+                      <span className="text-gray-400">%</span>
+                      <input type="number" value={c.discount || ''} onChange={e => {
+                        const val = Math.max(0, Math.min(100, Number(e.target.value) || 0))
+                        setCart(prev => prev.map(item => item.id === c.id ? { ...item, discount: val } : item))
+                      }}
+                        className="w-12 px-1.5 py-1 border border-gray-200 rounded text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                        placeholder="0" min="0" max="100" />
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-gray-800">{formatCurrency(c.sellingPrice * c.qty * (1 - (c.discount || 0) / 100))}</p>
+                      <p className="text-[10px] text-gray-400">{formatKHR(c.sellingPrice * c.qty * (1 - (c.discount || 0) / 100))}</p>
+                    </div>
+                  </div>
                 </div>
 
                 {c.reserved && (
@@ -562,7 +605,10 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
         <div className="border-t border-gray-100 p-4 space-y-3 bg-gray-50/30">
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-500">Subtotal</span>
-            <span className="font-semibold text-gray-800">{formatCurrency(subtotal)}</span>
+            <div className="text-right">
+              <span className="font-semibold text-gray-800">{formatCurrency(subtotal)}</span>
+              <p className="text-[10px] text-gray-400">{formatKHR(subtotal)}</p>
+            </div>
           </div>
 
           <div>
@@ -591,7 +637,10 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
 
           <div className="flex justify-between items-baseline border-t border-gray-200 pt-3">
             <span className="text-base font-bold text-gray-800">Total</span>
-            <span className="text-xl font-extrabold text-primary">{formatCurrency(total)}</span>
+            <div className="text-right">
+              <span className="text-xl font-extrabold text-primary">{formatCurrency(total)}</span>
+              <p className="text-[10px] text-gray-400">{formatKHR(total)}</p>
+            </div>
           </div>
 
           {saleMode === 'sale' && (
@@ -631,9 +680,12 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
           {saleMode === 'sale' && (
             <>
               {balance > 0 && (
-                <div className="flex justify-between text-sm bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                <div className="flex justify-between items-center text-sm bg-red-50 border border-red-100 rounded-lg px-3 py-2">
                   <span className="text-red-600 font-medium">Balance Due</span>
-                  <span className="text-red-600 font-bold">{formatCurrency(balance)}</span>
+                  <div className="text-right">
+                    <span className="text-red-600 font-bold">{formatCurrency(balance)}</span>
+                    <p className="text-[10px] text-red-400">{formatKHR(balance)}</p>
+                  </div>
                 </div>
               )}
             </>
@@ -714,7 +766,10 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
                       <td className="py-2 text-gray-700">{item.product}</td>
                       <td className="py-2 text-center text-gray-600">{item.qty}</td>
                       <td className="py-2 text-right text-gray-600">{formatCurrency(item.price)}</td>
-                      <td className="py-2 text-right font-medium">{formatCurrency(item.price * item.qty)}</td>
+                      <td className="py-2 text-right font-medium">
+                        {formatCurrency(item.price * item.qty)}
+                        <p className="text-[10px] text-gray-400">{formatKHR(item.price * item.qty)}</p>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -724,26 +779,41 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
                 <div className="w-56 space-y-1 text-sm">
                   <div className="flex justify-between text-gray-500">
                     <span>Subtotal</span>
-                    <span>{formatCurrency(showReceipt.subtotal)}</span>
+                    <div className="text-right">
+                      <span>{formatCurrency(showReceipt.subtotal)}</span>
+                      <p className="text-[10px] text-gray-400">{formatKHR(showReceipt.subtotal)}</p>
+                    </div>
                   </div>
                   {showReceipt.discount > 0 && (
                     <div className="flex justify-between text-gray-500">
                       <span>Discount</span>
-                      <span>-{formatCurrency(showReceipt.discount)}</span>
+                      <div className="text-right">
+                        <span>-{formatCurrency(showReceipt.discount)}</span>
+                        <p className="text-[10px] text-gray-400">{formatKHR(showReceipt.discount)}</p>
+                      </div>
                     </div>
                   )}
                   <div className="flex justify-between font-semibold text-gray-800 pt-1 border-t border-gray-100">
                     <span>Total</span>
-                    <span>{formatCurrency(showReceipt.total)}</span>
+                    <div className="text-right">
+                      <span>{formatCurrency(showReceipt.total)}</span>
+                      <p className="text-[10px] text-gray-400">{formatKHR(showReceipt.total)}</p>
+                    </div>
                   </div>
                   <div className="flex justify-between text-green-600">
                     <span>Paid</span>
-                    <span>{formatCurrency(showReceipt.paidAmount)}</span>
+                    <div className="text-right">
+                      <span>{formatCurrency(showReceipt.paidAmount)}</span>
+                      <p className="text-[10px] text-green-400">{formatKHR(showReceipt.paidAmount)}</p>
+                    </div>
                   </div>
                   {showReceipt.balance > 0 && (
                     <div className="flex justify-between text-red-600 font-medium">
                       <span>Balance Due</span>
-                      <span>{formatCurrency(showReceipt.balance)}</span>
+                      <div className="text-right">
+                        <span>{formatCurrency(showReceipt.balance)}</span>
+                        <p className="text-[10px] text-red-400">{formatKHR(showReceipt.balance)}</p>
+                      </div>
                     </div>
                   )}
                   <div className="flex justify-end pt-1">
@@ -780,6 +850,46 @@ export default function POS({ onUpdateProducts, onUpdateSales, globalSales, glob
         items={insufficientItems}
         onAction={handleInsufficientAction}
       />
+
+      <Modal open={showQrModal} onClose={() => { if (qrStep === 'scan') { setShowQrModal(false); setQrStep('idle') } }} title={qrStep === 'scan' ? 'Scan to Pay' : qrStep === 'verifying' ? 'Verifying Payment' : 'Payment Successful'}>
+        {qrStep === 'scan' && (
+          <div className="flex flex-col items-center gap-4 py-4 relative">
+            <button onClick={() => { setShowQrModal(false); setQrStep('idle') }}
+              className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 cursor-pointer">
+              <X size={15} />
+            </button>
+            <div className="bg-white rounded-xl border-2 border-dashed border-gray-200 p-4">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=KHQR|${customer}|${total}`}
+                alt="QR Code"
+                className="w-48 h-48"
+                onError={e => { e.target.src = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="white"/><rect x="20" y="20" width="50" height="50" fill="black"/><rect x="130" y="20" width="50" height="50" fill="black"/><rect x="20" y="130" width="50" height="50" fill="black"/><rect x="90" y="90" width="20" height="20" fill="black"/><rect x="60" y="130" width="10" height="10" fill="black"/><rect x="130" y="60" width="10" height="10" fill="black"/><rect x="60" y="60" width="10" height="10" fill="black"/><rect x="100" y="130" width="10" height="10" fill="black"/><rect x="130" y="100" width="10" height="10" fill="black"/><rect x="130" y="130" width="10" height="10" fill="black"/><rect x="40" y="100" width="10" height="10" fill="black"/></svg>`) }}
+              />
+            </div>
+            <p className="text-lg font-bold text-gray-800">{formatCurrency(total)}</p>
+            <p className="text-[11px] text-gray-400">{formatKHR(total)}</p>
+            <p className="text-xs text-gray-400">Scan with Bakong / KHQR app to pay</p>
+          </div>
+        )}
+        {qrStep === 'verifying' && (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <div className="w-20 h-20 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+            <p className="text-sm font-medium text-gray-700">Verifying payment with Bakong...</p>
+            <p className="text-xs text-gray-400">Please wait while we confirm the transaction</p>
+          </div>
+        )}
+        {qrStep === 'success' && (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
+              <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <p className="text-lg font-bold text-green-700">Payment Received!</p>
+            <p className="text-xs text-gray-400">{formatCurrency(total)} ({formatKHR(total)}) via KHQR / Bakong</p>
+          </div>
+        )}
+      </Modal>
 
       <Modal open={showNewCustomer} onClose={() => setShowNewCustomer(false)} title="New Customer">
         <div className="space-y-4">

@@ -7,6 +7,8 @@ export const categories = [
 
 export const locations = ['Main Warehouse', 'Store Front', 'Secondary Storage']
 
+export const units = ['Piece', 'Box', 'Kg', 'Liter', 'Pack', 'Bottle', 'Bag', 'Set', 'Dozen', 'Can', 'Carton', 'Gram', 'Meter']
+
 export const suppliers = [
   { id: 1, name: 'Beverage Supplier Co.', contact: '012 345 678', email: 'info@beverageco.com' },
   { id: 2, name: 'Food Supplier Co.', contact: '012 987 654', email: 'info@foodsupplier.com' },
@@ -143,8 +145,8 @@ export const purchases = [
   {
     id: purchaseIdCounter++, poNumber: 'PO-20260612-001', date: '2026-06-12', supplier: 'Beverage Supplier Co.',
     items: [{ product: 'Energy Drink', qty: 30, costPrice: 0.80 }],
-    totalCost: 24.00, staff: 'Inventory Vannak', status: 'Pending Approval',
-    createdBy: 'Inventory Vannak', approver: 'Owner Admin',
+    totalCost: 24.00, staff: 'Inventory Vannak', status: 'Ordered',
+    createdBy: 'Inventory Vannak',
   },
 ]
 
@@ -172,8 +174,18 @@ export const activityLog = [
   { id: 6, date: '2026-06-10 10:00', user: 'Inventory Vannak', action: 'Stock In PO-20260610-001', module: 'Purchases' },
 ]
 
+export const EXCHANGE_RATE = 4100
+
 export function formatCurrency(amount) {
   return '$' + Number(amount).toFixed(2)
+}
+
+export function formatKHR(amount) {
+  return '\u17DB' + Math.round(amount * EXCHANGE_RATE).toLocaleString()
+}
+
+export function formatDualCurrency(amount) {
+  return `$${Number(amount).toFixed(2)}  (${formatKHR(amount)})`
 }
 
 export function getLowStockProducts(productList) {
